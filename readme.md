@@ -11,6 +11,7 @@ This guide provides detailed instructions on setting up and running experiments 
 ## Condition
 - CUDA: 12.1.1
 - PyTorch: 2.1.2
+- GPU: 4x A6000
 
 ## Setup Script
 
