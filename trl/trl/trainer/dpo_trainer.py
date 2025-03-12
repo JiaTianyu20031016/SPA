@@ -734,6 +734,14 @@ class DPOTrainer(Trainer):
                 self.label_pad_token_id
             ] * len(rejected_tokens["prompt_input_ids"])
 
+            # warning: this is for truncation test.
+            chosen_sequence_tokens["labels"][-4:] = [
+                self.label_pad_token_id
+            ] * 4
+            rejected_sequence_tokens["labels"][-4:] = [
+                self.label_pad_token_id
+            ] * 4
+
             for k, toks in {
                 "chosen_": chosen_sequence_tokens,
                 "rejected_": rejected_sequence_tokens,

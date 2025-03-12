@@ -1,3 +1,7 @@
 alignment-handbook/*.ipynb
 alignment-handbook/results
-alignment-handbook/alpaca_eval
+alignment-handbook/save_confidence
+alignment-handbook/datasets
+alignment-handbook/save_model
+alignment-handbook/debug
+alignment-handbook/*.log

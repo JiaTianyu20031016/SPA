@@ -115,8 +115,16 @@ def apply_chat_template(
                 #maybe_insert_system_message(chosen_messages, tokenizer)
                 #maybe_insert_system_message(rejected_messages, tokenizer)
             example["text_prompt"] = tokenizer.apply_chat_template(prompt_messages, tokenize=False)
+            
+            # example["text_chosen"] = tokenizer.apply_chat_template(chosen_messages, tokenize=False)
+            # example["text_rejected"] = tokenizer.apply_chat_template(rejected_messages, tokenize=False)
             example["text_chosen"] = tokenizer.apply_chat_template(chosen_messages, tokenize=False)
+            if example["text_chosen"].startswith(tokenizer.bos_token):
+                example["text_chosen"] = example["text_chosen"][len(tokenizer.bos_token):]
             example["text_rejected"] = tokenizer.apply_chat_template(rejected_messages, tokenize=False)
+            if example["text_rejected"].startswith(tokenizer.bos_token):
+                example["text_rejected"] = example["text_rejected"][len(tokenizer.bos_token):]
+                
             if "prompt" in example :
                 example["original_prompt"] =  example["prompt"]
 

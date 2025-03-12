@@ -2,15 +2,15 @@ eval "$(conda shell.bash hook)"
 
 ## inital DPO training
 conda activate spa
-CUDA_VISIBLE_DEVICES=0,1,2,3 ACCELERATE_LOG_LEVEL=info accelerate launch --config_file recipes/accelerate_configs/deepspeed_zero3.yaml scripts/run_dpo.py recipes/zephyr-7b-beta/dpo/config_full_initial.yaml &
-wait
-sleep 30
+# CUDA_VISIBLE_DEVICES=0,1,2,3 ACCELERATE_LOG_LEVEL=info accelerate launch --config_file recipes/accelerate_configs/deepspeed_zero3.yaml scripts/run_dpo.py recipes/zephyr-7b-beta/dpo/config_full_initial.yaml &
+# wait
+# sleep 30
 
 ## loop start
 base_model=zephyr-2K
 infer_model=save_model/zephyr-2K
 
-for iteration in 1 2
+for iteration in 1 2 3
 do
     prompt_dir=datasets/spa_${iteration}
     sample_output_dir=datasets/sample-${base_model}-spa_${iteration}
@@ -20,7 +20,6 @@ do
     conda deactivate 
     conda activate vllm
     CUDA_VISIBLE_DEVICES=0,1,2,3 python scripts/online_generation.py --model_name_or_path ${infer_model} --dataset_name_or_path ${prompt_dir} --output_dir ${sample_output_dir} &
-
 
     wait
     conda deactivate 

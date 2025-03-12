@@ -33,8 +33,8 @@ max_prompt_length: 1024
 num_train_epochs: 3
 optim: adamw_torch
 output_dir: save_model/zephyr-2K
-per_device_eval_batch_size: 1
-per_device_train_batch_size: 1
+per_device_eval_batch_size: 8
+per_device_train_batch_size: 3
 push_to_hub: False
 save_strategy: 'no'
 save_steps: 200
