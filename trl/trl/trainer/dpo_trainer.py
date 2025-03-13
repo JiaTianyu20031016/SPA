@@ -47,6 +47,8 @@ from .utils import (
     pad_to_length,
     peft_module_casting_to_bf16,
     trl_sanitze_kwargs_for_tagging,
+    add_bos_token_if_needed,
+    add_eos_token_if_needed
 )
 from collections import deque
 import threading
@@ -683,20 +685,34 @@ class DPOTrainer(Trainer):
                 )
 
             # add BOS token to head of prompt
-            prompt_tokens["prompt_input_ids"] = [self.tokenizer.bos_token_id] + prompt_tokens["prompt_input_ids"]
-            chosen_tokens["prompt_input_ids"] = [self.tokenizer.bos_token_id] + chosen_tokens["prompt_input_ids"]
-            rejected_tokens["prompt_input_ids"] = [self.tokenizer.bos_token_id] + rejected_tokens["prompt_input_ids"]
+            add_bos_token_if_needed(
+                self.tokenizer,
+                prompt_len_input_ids=prompt_len_input_ids,
+                prompt_tokens=prompt_tokens,
+                chosen_prompt_len_input_ids=chosen_prompt_len_input_ids,
+                chosen_tokens=chosen_tokens,
+                rejected_prompt_len_input_ids=rejected_prompt_len_input_ids,
+                rejected_tokens=rejected_tokens
+            )
+            # prompt_tokens["prompt_input_ids"] = [self.tokenizer.bos_token_id] + prompt_tokens["prompt_input_ids"]
+            # chosen_tokens["prompt_input_ids"] = [self.tokenizer.bos_token_id] + chosen_tokens["prompt_input_ids"]
+            # rejected_tokens["prompt_input_ids"] = [self.tokenizer.bos_token_id] + rejected_tokens["prompt_input_ids"]
 
-            prompt_tokens["prompt_attention_mask"] = [1] + prompt_tokens["prompt_attention_mask"]
-            chosen_tokens["prompt_attention_mask"] = [1] + chosen_tokens["prompt_attention_mask"]
-            rejected_tokens["prompt_attention_mask"] = [1] + rejected_tokens["prompt_attention_mask"]
+            # prompt_tokens["prompt_attention_mask"] = [1] + prompt_tokens["prompt_attention_mask"]
+            # chosen_tokens["prompt_attention_mask"] = [1] + chosen_tokens["prompt_attention_mask"]
+            # rejected_tokens["prompt_attention_mask"] = [1] + rejected_tokens["prompt_attention_mask"]
 
             # add EOS token to end of answer
-            chosen_tokens["input_ids"].append(self.tokenizer.eos_token_id)
-            chosen_tokens["attention_mask"].append(1)
+            add_eos_token_if_needed(
+                self.tokenizer.eos_token_id,
+                chosen_tokens=chosen_tokens,
+                rejected_tokens=rejected_tokens
+            )
+            # chosen_tokens["input_ids"].append(self.tokenizer.eos_token_id)
+            # chosen_tokens["attention_mask"].append(1)
 
-            rejected_tokens["input_ids"].append(self.tokenizer.eos_token_id)
-            rejected_tokens["attention_mask"].append(1)
+            # rejected_tokens["input_ids"].append(self.tokenizer.eos_token_id)
+            # rejected_tokens["attention_mask"].append(1)
 
             longer_response_length = max(len(chosen_tokens["input_ids"]), len(rejected_tokens["input_ids"]))
 
@@ -735,12 +751,9 @@ class DPOTrainer(Trainer):
             ] * len(rejected_tokens["prompt_input_ids"])
 
             # warning: this is for truncation test.
-            chosen_sequence_tokens["labels"][-4:] = [
-                self.label_pad_token_id
-            ] * 4
-            rejected_sequence_tokens["labels"][-4:] = [
-                self.label_pad_token_id
-            ] * 4
+            chosen_sequence_tokens["labels"][-1] = self.label_pad_token_id
+            rejected_sequence_tokens["labels"][-1] = self.label_pad_token_id
+
 
             for k, toks in {
                 "chosen_": chosen_sequence_tokens,

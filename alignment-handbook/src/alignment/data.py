@@ -23,6 +23,12 @@ from .configs import DataArguments
 sys = ""#"You are a helpful, respectful, and honest assistant. Always answer as helpfully as possible, while being safe. Your answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Please ensure that your responses are socially unbiased and positive in nature.\nIf a question does not make any sense, or is not factually coherent, explain why instead of answering something not correct. If you don't know the answer to a question, please don't share false information.\nFocus on essential information and keep explanations brief to ensure clarity and conciseness."
 DEFAULT_CHAT_TEMPLATE = "{% for message in messages %}\n{% if message['role'] == 'user' %}\n{{ '<|user|>\n' + message['content'] + eos_token }}\n{% elif message['role'] == 'system' %}\n{{ '<|system|>\n' + message['content'] + eos_token }}\n{% elif message['role'] == 'assistant' %}\n{{ '<|assistant|>\n'  + message['content'] + eos_token }}\n{% endif %}\n{% if loop.last and add_generation_prompt %}\n{{ '<|assistant|>' }}\n{% endif %}\n{% endfor %}"
 
+def truncate_after_last_occurrence(text: str, substring: str) -> str:
+    index = text.rfind(substring)  # 找到子串最后一次出现的位置
+    if index != -1:
+        return text[:index + len(substring)]  # 保留子串到该位置
+    return text  # 如果找不到子串，则返回原字符串
+
 def maybe_insert_system_message(messages, tokenizer):
     if messages[0]["role"] == "system":
         return
@@ -121,9 +127,11 @@ def apply_chat_template(
             example["text_chosen"] = tokenizer.apply_chat_template(chosen_messages, tokenize=False)
             if example["text_chosen"].startswith(tokenizer.bos_token):
                 example["text_chosen"] = example["text_chosen"][len(tokenizer.bos_token):]
+            example["text_chosen"] = truncate_after_last_occurrence(example["text_chosen"], tokenizer.eos_token)
             example["text_rejected"] = tokenizer.apply_chat_template(rejected_messages, tokenize=False)
             if example["text_rejected"].startswith(tokenizer.bos_token):
                 example["text_rejected"] = example["text_rejected"][len(tokenizer.bos_token):]
+            example["text_rejected"] = truncate_after_last_occurrence(example["text_rejected"], tokenizer.eos_token)
                 
             if "prompt" in example :
                 example["original_prompt"] =  example["prompt"]
