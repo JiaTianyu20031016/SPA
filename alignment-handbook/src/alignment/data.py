@@ -170,9 +170,15 @@ def get_datasets(
         #     - 'dataset2': 0.3
         #     - 'dataset3': 0.2
         if type(data_config.dataset_mixer) is str :
-            dataset_mixer = {data_config.dataset_mixer: 1}
-        else :
-            dataset_mixer = data_config.dataset_mixer
+            dataset_mixer = {dataset: 1 for dataset in data_config.dataset_mixer.split(',')}
+        elif type(data_config.dataset_mixer) is dict :
+            dataset_mixer = {}
+            for datasets, frac in data_config.dataset_mixer.items():
+                for dataset in datasets.split(','):
+                    dataset_mixer[dataset] = frac
+        else:
+            raise ValueError(f"data_config.dataset_mixer {data_config.dataset_mixer} not recognized.")
+    
     elif isinstance(data_config, dict):
         # Structure of the input is:
         #     dataset_mixer = {
@@ -180,7 +186,10 @@ def get_datasets(
         #             "dataset1": 0.3,
         #             "dataset1": 0.2,
         #         }
-        dataset_mixer = data_config
+        dataset_mixer = {}
+        for datasets, frac in data_config.items():
+            for dataset in datasets.split(','):
+                dataset_mixer[dataset] = frac
 
     else:
         raise ValueError(f"Data config {data_config} not recognized.")
