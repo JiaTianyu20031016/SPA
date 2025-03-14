@@ -396,21 +396,6 @@ def main():
     metrics["eval_samples"] = len(raw_datasets)
     trainer.log_metrics("eval", metrics)
     trainer.save_metrics("eval", metrics)
-    
-    ##################################
-    # Save model and create model card
-    ##################################    
-    import json
-    with open('save_confidence/' + save_confidence_name, 'r') as json_file:
-        confidence = json.load(json_file)
-    from datasets import load_dataset, Dataset, DatasetDict
-    save_path = "datasets/"+save_confidence_name.rstrip(".json") 
-    final_dataset = process_evaluation_results(initial_training_raw, confidence)
-    train_dataset = DatasetDict({
-        "train": final_dataset,
-        "test": initial_testing_raw,
-    })
-    train_dataset.save_to_disk(save_path)
 
 
 if __name__ == "__main__":

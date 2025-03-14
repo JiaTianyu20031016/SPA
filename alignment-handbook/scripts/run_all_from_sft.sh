@@ -17,9 +17,7 @@ do
     judge_output_dir=datasets/training-${base_model}-spa_${iteration}
     final_model_path=save_model/${base_model}-spa_${iteration}
 
-    conda deactivate 
-    conda activate vllm
-    CUDA_VISIBLE_DEVICES=0,1,2,3 python scripts/online_generation.py --model_name_or_path ${infer_model} --dataset_name_or_path ${prompt_dir} --output_dir ${sample_output_dir} &
+    python scripts/prepare_original_data.py --dataset_name_or_path ${prompt_dir} --output_dir ${sample_output_dir} &
     
     wait
     conda deactivate 
@@ -33,7 +31,7 @@ do
     
     wait
     sleep 30
-    CUDA_VISIBLE_DEVICES=0,1,2,3 ACCELERATE_LOG_LEVEL=info accelerate launch --config_file recipes/accelerate_configs/deepspeed_zero3.yaml scripts/run_dpo.py recipes/zephyr-7b-beta/dpo/config_full.yaml --dataset_mixer=${judge_output_dir}  --model_name_or_path=${infer_model} --ref_model_for_refine=${infer_model} --output_dir=${final_model_path} &
+    CUDA_VISIBLE_DEVICES=0,1,2,3 ACCELERATE_LOG_LEVEL=info accelerate launch --config_file recipes/accelerate_configs/deepspeed_zero3.yaml scripts/run_dpo.py recipes/zephyr-7b-beta/dpo/config_full.yaml --dataset_mixer=${judge_output_dir}  --model_name_or_path=${infer_model} --output_dir=${final_model_path} &
     wait
     sleep 30
     # Update infer_model for the next iteration

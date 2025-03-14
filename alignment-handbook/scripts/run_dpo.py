@@ -235,7 +235,7 @@ def main():
         )
         model_kwargs = None
 
-    ref_model = model #"mistralai/Mistral-7B-Instruct-v0.2"
+    ref_model = training_args.ref_model_for_refine
     ref_model_kwargs = model_kwargs
 
     if model_args.use_peft is True:
