@@ -131,8 +131,10 @@ def prepare_pairwise_data(dataset):
             grouped_data[item['index']] = []
         grouped_data[item['index']] = {
             'prompt': item['prompt'],
-            'response': item['response']
+            'response': item['response'],
+            'truncated': item['truncated'] if 'truncated' in item.keys() else [False] * len(item['response'])
         }
+
     
     # Create pairs for each group
     for index, responses in grouped_data.items():
@@ -144,6 +146,8 @@ def prepare_pairwise_data(dataset):
                 'prompt': responses['prompt'],
                 'chosen':   [{"content":responses['prompt'],"role":"user"},{"content":responses['response'][i],"role":"assistant"}],
                 'rejected': [{"content":responses['prompt'],"role":"user"},{"content":responses['response'][i+1],"role":"assistant"}],
+                'is_chosen_truncated':  responses['truncated'][i], 
+                'is_rejected_truncated':  responses['truncated'][i+1],             
             })
             
         # For odd number of responses, use the last response twice if needed
@@ -153,13 +157,17 @@ def prepare_pairwise_data(dataset):
                 'prompt': responses['prompt'],
                 'chosen':   [{"content":responses['prompt'],"role":"user"},{"content":responses['response'][-1],"role":"assistant"}],
                 'rejected': [{"content":responses['prompt'],"role":"user"},{"content":responses['response'][0],"role":"assistant"}],
+                'is_chosen_truncated':  responses['truncated'][-1], 
+                'is_rejected_truncated':  responses['truncated'][0],             
             })
 
     return Dataset.from_dict({
         'index': [item['index'] for item in processed_data],
         'prompt': [item['prompt'] for item in processed_data],
         'chosen': [item['chosen'] for item in processed_data],
-        'rejected': [item['rejected'] for item in processed_data]
+        'rejected': [item['rejected'] for item in processed_data],
+        'is_chosen_truncated': [item['is_chosen_truncated'] for item in processed_data],
+        'is_rejected_truncated': [item['is_rejected_truncated'] for item in processed_data],
     })
 
 def process_evaluation_results(raw_datasets, save_confidence, strategy="min_max"):
@@ -309,7 +317,9 @@ def main():
     for index in random.sample(range(len(raw_datasets)), 3):
         logger.info(f"Prompt sample {index} of the raw training set:\n\n{raw_datasets[index]['prompt']}")
         logger.info(f"Chosen sample {index} of the raw training set:\n\n{raw_datasets[index]['chosen']}")
+        logger.info(f"Is chosen sample truncated:\n\n{raw_datasets[index]['is_chosen_truncated']}")
         logger.info(f"Rejected sample {index} of the raw training set:\n\n{raw_datasets[index]['rejected']}")
+        logger.info(f"Is rejected sample truncated:\n\n{raw_datasets[index]['is_rejected_truncated']}")
 
     torch_dtype = (
         model_args.torch_dtype if model_args.torch_dtype in ["auto", None] else getattr(torch, model_args.torch_dtype)

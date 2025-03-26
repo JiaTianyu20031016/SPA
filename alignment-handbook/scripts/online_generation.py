@@ -1,3 +1,6 @@
+# import os
+# os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2,3'
+
 #!/usr/bin/env python
 from dataclasses import dataclass, field
 from typing import List, Optional
@@ -10,6 +13,7 @@ from transformers import (
 )
 from vllm import LLM, SamplingParams
 import json
+
 
 def maybe_insert_system_message(messages):
     # confirm the jinja template refers to a system message before inserting
@@ -153,14 +157,20 @@ new_dataset = {}
 new_dataset['prompt'] = []
 new_dataset['response'] = []
 new_dataset['original_prompt'] = []
+new_dataset['truncated'] = []
 new_dataset['index'] = []
 
 for i, output in enumerate(outputs):
     tmp_data = {"prompt": prompts[i], "response": [out.text for out in output.outputs] ,"original_prompt" :original_prompt[i]}
     new_dataset['prompt'].append(original_prompt[i])
     new_dataset['response'].append([out.text for out in output.outputs])
+    new_dataset['truncated'].append([len(out.token_ids) == script_args.max_new_tokens for out in output.outputs])
     new_dataset['original_prompt'].append(original_prompt[i])
     new_dataset['index'].append(index[i])
+    for out in output.outputs:
+        assert len(out.token_ids) <= script_args.max_new_tokens
+    # print([len(out.token_ids) == script_args.max_new_tokens for out in output.outputs])
+    # print([out.text for out in output.outputs])
 
 print(new_dataset)
 

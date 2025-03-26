@@ -639,6 +639,8 @@ class DPOTrainer(Trainer):
         prompt = feature["prompt"]
         chosen = feature["chosen"]
         rejected = feature["rejected"]
+        is_chosen_truncated = feature['is_chosen_truncated'] if 'is_chosen_truncated' in feature.keys() else False
+        is_rejected_truncated = feature['is_rejected_truncated'] if 'is_rejected_truncated' in feature.keys() else False
         if "index" in feature.keys() :
             batch["index"] = feature["index"]
 
@@ -751,8 +753,14 @@ class DPOTrainer(Trainer):
             ] * len(rejected_tokens["prompt_input_ids"])
 
             # warning: this is for truncation test.
-            # chosen_sequence_tokens["labels"][-1] = self.label_pad_token_id
-            # rejected_sequence_tokens["labels"][-1] = self.label_pad_token_id
+            if is_chosen_truncated:
+                chosen_sequence_tokens["labels"][-1] = self.label_pad_token_id
+            #else:
+            #    print(chosen)
+            if is_rejected_truncated:
+                rejected_sequence_tokens["labels"][-1] = self.label_pad_token_id
+            #else:
+            #    print(rejected)
 
             for k, toks in {
                 "chosen_": chosen_sequence_tokens,

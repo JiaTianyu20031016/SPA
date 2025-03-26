@@ -2,7 +2,6 @@ import logging
 import random
 import sys
 
-##### ATTENTION: modify 'alignment' to 'src.alignment', to redirect the import to src/alignment #####
 from alignment import H4ArgumentParser
 import datasets
 datasets.disable_caching()
@@ -50,10 +49,11 @@ def process_single_index(idx):
     
     dataset_idx = global_index_map[idx]
     responses = global_raw_datasets['response'][dataset_idx]
+    truncated = global_raw_datasets['truncated'][dataset_idx] if 'truncated' in global_raw_datasets.column_names else [False] * len(responses)
     rewards = global_index_response_rewards[idx]
     
-    response_data = [(response_idx, response, rewards.get(response_idx, float('-inf')))
-                     for response_idx, response in enumerate(responses)]
+    response_data = [(response_idx, response[0], response[1], rewards.get(response_idx, float('-inf')))
+                     for response_idx, response in enumerate(zip(responses, truncated))]
     
     if len(response_data) >= 2:
         sorted_responses = sorted(response_data, key=lambda x: x[2], reverse=True)
@@ -65,8 +65,10 @@ def process_single_index(idx):
             'prompt': global_raw_datasets['prompt'][dataset_idx],
             'chosen': [{"content": global_raw_datasets['prompt'][dataset_idx], "role": "user"}, {"content": best[1], "role": "assistant"}],
             'rejected': [{"content": global_raw_datasets['prompt'][dataset_idx], "role": "user"}, {"content": worst[1], "role": "assistant"}],
-            'chosen_reward': best[2],
-            'rejected_reward': worst[2]
+            'is_chosen_truncated': best[2],
+            'is_rejected_truncated': worst[2],
+            'chosen_reward': best[3],
+            'rejected_reward': worst[3],
         }
         # logger.info(f"Processed dataset_idx {dataset_idx}: chosen={best[2]}, rejected={worst[2]}")
         return result
@@ -86,7 +88,6 @@ def process_evaluation_results(raw_datasets, save_confidence, strategy="min_max"
         index_response_rewards[int(original_idx)][int(rejected_idx)] = float(rejected_reward)
     
     # logger.info(f"Number of indices to process: {len(index_response_rewards.keys())}")
-
     with Pool(processes=64, initializer=init_worker, initargs=(raw_datasets, index_response_rewards, strategy, index_map)) as pool:
         results = []
         total_indices = len(index_response_rewards.keys())
@@ -145,7 +146,9 @@ def main():
         'chosen': [item['chosen'] for item in selected_data],
         'rejected': [item['rejected'] for item in selected_data],
         'chosen_reward': [item['chosen_reward'] for item in selected_data],
-        'rejected_reward': [item['rejected_reward'] for item in selected_data]
+        'rejected_reward': [item['rejected_reward'] for item in selected_data],
+        'is_chosen_truncated': [item['is_chosen_truncated'] for item in selected_data],
+        'is_rejected_truncated': [item['is_rejected_truncated'] for item in selected_data]
     })
     remain_dataset =  Dataset.from_dict({
         'index': [item['index'] for item in remain_data],
@@ -153,7 +156,9 @@ def main():
         'chosen': [item['chosen'] for item in remain_data],
         'rejected': [item['rejected'] for item in remain_data],
         'chosen_reward': [item['chosen_reward'] for item in remain_data],
-        'rejected_reward': [item['rejected_reward'] for item in remain_data]
+        'rejected_reward': [item['rejected_reward'] for item in remain_data],
+        'is_chosen_truncated': [item['is_chosen_truncated'] for item in remain_data],
+        'is_rejected_truncated': [item['is_rejected_truncated'] for item in remain_data]
     })
     
     selected_path = "datasets/"+save_confidence_name.rstrip(".json") 
