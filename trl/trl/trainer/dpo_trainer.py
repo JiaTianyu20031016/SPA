@@ -753,11 +753,11 @@ class DPOTrainer(Trainer):
             ] * len(rejected_tokens["prompt_input_ids"])
 
             # warning: this is for truncation test.
-            if is_chosen_truncated:
+            if is_chosen_truncated and chosen_sequence_tokens["input_ids"][-1] == self.tokenizer.eos_token_id:
                 chosen_sequence_tokens["labels"][-1] = self.label_pad_token_id
             #else:
             #    print(chosen)
-            if is_rejected_truncated:
+            if is_rejected_truncated and rejected_sequence_tokens["input_ids"][-1] == self.tokenizer.eos_token_id:
                 rejected_sequence_tokens["labels"][-1] = self.label_pad_token_id
             #else:
             #    print(rejected)

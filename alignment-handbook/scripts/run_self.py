@@ -317,9 +317,9 @@ def main():
     for index in random.sample(range(len(raw_datasets)), 3):
         logger.info(f"Prompt sample {index} of the raw training set:\n\n{raw_datasets[index]['prompt']}")
         logger.info(f"Chosen sample {index} of the raw training set:\n\n{raw_datasets[index]['chosen']}")
-        logger.info(f"Is chosen sample truncated:\n\n{raw_datasets[index]['is_chosen_truncated']}")
+        logger.info(f"Is chosen sample truncated:\n\n{raw_datasets[index]['is_chosen_truncated'] if 'is_chosen_truncated' in raw_datasets[index].keys() and raw_datasets[index]['is_chosen_truncated'] is not None else False}")
         logger.info(f"Rejected sample {index} of the raw training set:\n\n{raw_datasets[index]['rejected']}")
-        logger.info(f"Is rejected sample truncated:\n\n{raw_datasets[index]['is_rejected_truncated']}")
+        logger.info(f"Is rejected sample truncated:\n\n{raw_datasets[index]['is_rejected_truncated'] if 'is_rejected_truncated' in raw_datasets[index].keys() and raw_datasets[index]['is_rejected_truncated'] is not None else False}")
 
     torch_dtype = (
         model_args.torch_dtype if model_args.torch_dtype in ["auto", None] else getattr(torch, model_args.torch_dtype)

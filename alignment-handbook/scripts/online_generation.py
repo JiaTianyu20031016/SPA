@@ -172,7 +172,7 @@ for i, output in enumerate(outputs):
     # print([len(out.token_ids) == script_args.max_new_tokens for out in output.outputs])
     # print([out.text for out in output.outputs])
 
-print(new_dataset)
+# print(new_dataset)
 
 from datasets import Dataset,DatasetDict
 new_dataset = Dataset.from_dict(new_dataset)

@@ -56,7 +56,7 @@ def process_single_index(idx):
                      for response_idx, response in enumerate(zip(responses, truncated))]
     
     if len(response_data) >= 2:
-        sorted_responses = sorted(response_data, key=lambda x: x[2], reverse=True)
+        sorted_responses = sorted(response_data, key=lambda x: x[3], reverse=True)
         best = sorted_responses[0]
         worst = sorted_responses[-1] if global_strategy == 'min_max' else random.choice(sorted_responses[1:])
         
