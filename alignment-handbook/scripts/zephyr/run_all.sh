@@ -2,7 +2,7 @@ eval "$(conda shell.bash hook)"
 
 ## inital DPO training
 conda activate spa
-# CUDA_VISIBLE_DEVICES=0,1,2,3 ACCELERATE_LOG_LEVEL=info accelerate launch --config_file recipes/accelerate_configs/deepspeed_zero3.yaml scripts/run_dpo.py recipes/zephyr-7b-beta/dpo/config_full_initial.yaml &
+# CUDA_VISIBLE_DEVICES=4,5,6,7 ACCELERATE_LOG_LEVEL=info accelerate launch --config_file recipes/accelerate_configs/deepspeed_zero3.yaml scripts/run_dpo.py recipes/zephyr-7b-beta/dpo/config_full_initial.yaml &
 # wait
 # sleep 30
 
@@ -19,21 +19,23 @@ do
 
     conda deactivate 
     conda activate vllm
-    CUDA_VISIBLE_DEVICES=0,1,2,3 python scripts/online_generation.py --model_name_or_path ${infer_model} --dataset_name_or_path ${prompt_dir} --output_dir ${sample_output_dir} &
+    CUDA_VISIBLE_DEVICES=4,5,6,7 python scripts/online_generation.py --model_name_or_path ${infer_model} --dataset_name_or_path ${prompt_dir} --output_dir ${sample_output_dir} &
 
     wait
+    # sleep 30
+    # CUDA_VISIBLE_DEVICES=4,5,6,7 python scripts/run_rm.py --dataset_mixer=${sample_output_dir} --save_confidence_name=${judge_output_dir} --mode=ArmoRM &
     conda deactivate 
     conda activate spa
     sleep 30
-    CUDA_VISIBLE_DEVICES=0,1,2,3 ACCELERATE_LOG_LEVEL=info accelerate launch --config_file recipes/accelerate_configs/deepspeed_zero3.yaml scripts/run_self.py recipes/zephyr-7b-beta/dpo/config_full.yaml --dataset_mixer=${sample_output_dir}  --model_name_or_path=${infer_model} --output_dir=${final_model_path} --save_confidence_name=${judge_output_dir} &
+    CUDA_VISIBLE_DEVICES=4,5,6,7 ACCELERATE_LOG_LEVEL=info accelerate launch --config_file recipes/accelerate_configs/deepspeed_zero3.yaml scripts/run_self.py recipes/zephyr-7b-beta/dpo/config_full.yaml --dataset_mixer=${sample_output_dir}  --model_name_or_path=${infer_model} --output_dir=${final_model_path} --save_confidence_name=${judge_output_dir} &
+    
+    wait
+    sleep 30
+    python scripts/make_training_samples.py --dataset_mixer=${sample_output_dir} --save_confidence_name=${judge_output_dir} &
 
     wait
     sleep 30
-    python scripts/make_training_samples.py --dataset_mixer=${sample_output_dir} --save_confidence_name=${judge_output_dir} --select_num=30000 &
-
-    wait
-    sleep 30
-    CUDA_VISIBLE_DEVICES=0,1,2,3 ACCELERATE_LOG_LEVEL=info accelerate launch --config_file recipes/accelerate_configs/deepspeed_zero3.yaml scripts/run_dpo.py recipes/zephyr-7b-beta/dpo/config_full.yaml --dataset_mixer=${judge_output_dir}  --model_name_or_path=${infer_model} --ref_model_for_refine=${infer_model} --output_dir=${final_model_path} &
+    CUDA_VISIBLE_DEVICES=4,5,6,7 ACCELERATE_LOG_LEVEL=info accelerate launch --config_file recipes/accelerate_configs/deepspeed_zero3.yaml scripts/run_dpo.py recipes/zephyr-7b-beta/dpo/config_full.yaml --dataset_mixer=${judge_output_dir}  --model_name_or_path=${infer_model} --ref_model_for_refine=${infer_model} --output_dir=${final_model_path} --num_train_epochs=2 &
     wait
     sleep 30
     # Update infer_model for the next iteration

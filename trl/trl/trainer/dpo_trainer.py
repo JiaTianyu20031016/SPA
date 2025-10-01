@@ -686,8 +686,8 @@ class DPOTrainer(Trainer):
                     "last token due to tokenizer merge ops."
                 )
 
-            # add BOS token to head of prompt
-            add_bos_token_if_needed(
+            # add BOS token to head of prompt. Avoid adding if it's already there
+            prompt_tokens, chosen_tokens, rejected_tokens = add_bos_token_if_needed(
                 self.tokenizer,
                 prompt_len_input_ids=prompt_len_input_ids,
                 prompt_tokens=prompt_tokens,
@@ -704,8 +704,8 @@ class DPOTrainer(Trainer):
             # chosen_tokens["prompt_attention_mask"] = [1] + chosen_tokens["prompt_attention_mask"]
             # rejected_tokens["prompt_attention_mask"] = [1] + rejected_tokens["prompt_attention_mask"]
 
-            # add EOS token to end of answer
-            add_eos_token_if_needed(
+            # add EOS token to end of answer. Avoid adding if it's already there
+            chosen_tokens, rejected_tokens = add_eos_token_if_needed(
                 self.tokenizer.eos_token_id,
                 chosen_tokens=chosen_tokens,
                 rejected_tokens=rejected_tokens

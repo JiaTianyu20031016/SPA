@@ -5,3 +5,4 @@ alignment-handbook/datasets
 alignment-handbook/save_model
 alignment-handbook/debug
 alignment-handbook/*.log
+datasets

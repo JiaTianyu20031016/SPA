@@ -64,7 +64,29 @@ def is_openai_format(messages) -> bool:
         return all("role" in message and "content" in message for message in messages)
     return False
 
+def truncate_by_token_length(
+        example,
+        tokenizer,
+        max_tokens: int
+    ):
 
+    for key in ['chosen', 'rejected']:
+        # 编码为 token ids
+        text = example[f"text_{key}"]
+        token_ids = tokenizer.encode(text, add_special_tokens=False)
+        
+        # 判断是否需要截断
+        if f'is_{key}_truncated' in example.keys() and example[f'is_{key}_truncated'] is not None:
+            example[f'is_{key}_truncated'] = (example[f'is_{key}_truncated'] or (len(token_ids) > max_tokens))
+        else:
+            example[f'is_{key}_truncated'] = (len(token_ids) > max_tokens)
+        truncated_ids = token_ids[:max_tokens]
+        truncated_text = tokenizer.decode(truncated_ids, skip_special_tokens=True)
+        example[f"text_{key}"] = truncated_text
+    
+    return example
+    
+    
 def apply_chat_template(
     example,
     tokenizer,
@@ -103,6 +125,7 @@ def apply_chat_template(
             # For DPO/ORPO, the inputs are triples of (prompt, chosen, rejected), where `chosen` and `rejected` are the final turn of a dialogue
             # We therefore need to extract the N-1 turns to form the prompt
             if "prompt" in example and is_openai_format(example["prompt"]):
+                raise(NotImplementedError("This is Suspicious Code!"))
                 prompt_messages  = example["chosen"][:-1]
                 chosen_messages = example["chosen"]
                 rejected_messages = example["rejected"]
@@ -120,7 +143,8 @@ def apply_chat_template(
                 maybe_insert_system_message(prompt_messages, tokenizer)
                 #maybe_insert_system_message(chosen_messages, tokenizer)
                 #maybe_insert_system_message(rejected_messages, tokenizer)
-            example["text_prompt"] = tokenizer.apply_chat_template(prompt_messages, tokenize=False)
+            
+            '''example["text_prompt"] = tokenizer.apply_chat_template(prompt_messages, tokenize=False)
             
             # example["text_chosen"] = tokenizer.apply_chat_template(chosen_messages, tokenize=False)
             # example["text_rejected"] = tokenizer.apply_chat_template(rejected_messages, tokenize=False)
@@ -131,8 +155,11 @@ def apply_chat_template(
             example["text_rejected"] = tokenizer.apply_chat_template(rejected_messages, tokenize=False)
             if example["text_rejected"].startswith(tokenizer.bos_token):
                 example["text_rejected"] = example["text_rejected"][len(tokenizer.bos_token):]
-            example["text_rejected"] = truncate_after_last_occurrence(example["text_rejected"], tokenizer.eos_token)
-                
+            example["text_rejected"] = truncate_after_last_occurrence(example["text_rejected"], tokenizer.eos_token)'''
+            
+            example["text_prompt"] = tokenizer.apply_chat_template(prompt_messages, tokenize=False, add_generation_prompt=True)
+            example["text_chosen"] = chosen_messages[0]['content']
+            example["text_rejected"] = rejected_messages[0]['content']
             if "prompt" in example :
                 example["original_prompt"] =  example["prompt"]
 
@@ -163,7 +190,7 @@ def get_datasets(
         [`DatasetDict`]: The dataset dictionary containing the loaded datasets.
     """
 
-    if type(data_config) is DataArguments:
+    '''if type(data_config) is DataArguments:
         # Structure of the config to read the datasets and their mix
         # datasets_mixer:
         #     - 'dataset1': 0.5
@@ -190,6 +217,31 @@ def get_datasets(
         for datasets, frac in data_config.items():
             for dataset in datasets.split(','):
                 dataset_mixer[dataset] = frac
+
+    else:
+        raise ValueError(f"Data config {data_config} not recognized.")
+
+    raw_datasets = mix_datasets(dataset_mixer, splits=splits, shuffle=shuffle)
+    return raw_datasets'''
+    
+    if type(data_config) is DataArguments:
+        # Structure of the config to read the datasets and their mix
+        # datasets_mixer:
+        #     - 'dataset1': 0.5
+        #     - 'dataset2': 0.3
+        #     - 'dataset3': 0.2
+        if type(data_config.dataset_mixer) is str :
+            dataset_mixer = {data_config.dataset_mixer: 1}
+        else :
+            dataset_mixer = data_config.dataset_mixer
+    elif isinstance(data_config, dict):
+        # Structure of the input is:
+        #     dataset_mixer = {
+        #             "dataset1": 0.5,
+        #             "dataset1": 0.3,
+        #             "dataset1": 0.2,
+        #         }
+        dataset_mixer = data_config
 
     else:
         raise ValueError(f"Data config {data_config} not recognized.")

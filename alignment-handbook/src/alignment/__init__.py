@@ -1,7 +1,7 @@
 __version__ = "0.3.0.dev0"
 
 from .configs import DataArguments, DPOConfig, H4ArgumentParser, ModelArguments, SFTConfig
-from .data import apply_chat_template, get_datasets
+from .data import apply_chat_template, get_datasets, truncate_by_token_length
 from .generate_trainer import Sampler
 from .model_utils import (
     get_checkpoint,

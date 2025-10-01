@@ -1,18 +1,27 @@
-# import os
-# os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2,3'
+'''
+Note:
+This script is adapted from its single-process version (online_generation_no_multiprocessing.py). 
+Specifically, we wrap the original core code into `generate` function, and use multiprocessing to call it on different GPUs in order to mannually realise parallel acceleration.
+To use this script, make sure `script_args.my_world_size is equal to the total number of visible GPUs.
+We keep script_args.tp equal to 1, so that tensor parallel is disabled.
+If the model is too large to fit in a single GPU, you should use the original script (online_generation_no_multiprocessing.py) instead.
+'''
+
+
+import os
 
 #!/usr/bin/env python
 from dataclasses import dataclass, field
 from typing import List, Optional
 import numpy as np
-import torch
-from datasets import load_dataset, load_from_disk
+
+from datasets import load_dataset, load_from_disk, concatenate_datasets
 from transformers import (
     AutoTokenizer,
     HfArgumentParser,
 )
-from vllm import LLM, SamplingParams
 import json
+import multiprocessing as mp
 
 
 def maybe_insert_system_message(messages):
@@ -52,15 +61,15 @@ class ScriptArguments:
         metadata={"help": "the number of generations per prompt"},
     )
     tp: Optional[int] = field(
-        default=4,
+        default=1,
         metadata={"help": "tensor_parallel_size"},
     )
     max_input_length: Optional[int] = field(
-        default=2048,
+        default=4096,
         metadata={"help": "the maximum length of the input tokens"},
     )
     max_new_tokens: Optional[int] = field(
-        default=300,
+        default=1024,
         metadata={"help": "the maximum length of the new tokens"},
     )
     seed: Optional[int] = field(
@@ -79,113 +88,219 @@ class ScriptArguments:
         default="context_messages",
         metadata={"help": "the key of the dataset"},
     )
-    eos_ids: List[int] = field(default_factory=lambda: [], metadata={"help": "the ids of the end of sentence tokens"})
+    eos_ids: List[int] = field(
+        default_factory=lambda: [], 
+        metadata={"help": "the ids of the end of sentence tokens"}
+    )
 
 
-parser = HfArgumentParser(ScriptArguments)
-script_args = parser.parse_args_into_dataclasses()[0]
+def split_dataset(dataset, num_splits):
+    import math
+    total = len(dataset)
+    size = math.ceil(total / num_splits)
+    ds_list = []
+    for i in range(num_splits):
+        sub_ds = dataset.select(range(i * size, min((i + 1) * size, total)))
+        ds_list.append(sub_ds)
+    return ds_list
 
-model_path = script_args.model_name_or_path
-print("model_path", model_path)
-seed = script_args.seed
-# set seed
-torch.manual_seed(seed)
-np.random.seed(seed)
 
-tokenizer = AutoTokenizer.from_pretrained(model_path)
-tokenizer.truncation_side = "left"
-tokenizer.padding_side  = 'left'
-sampling_params = SamplingParams(
-    temperature=script_args.temperature,
-    top_p=1.0,
-    max_tokens=script_args.max_new_tokens,
-    n=script_args.K,
-    stop_token_ids=[tokenizer.eos_token_id] + script_args.eos_ids,
+def generate(ds):
+    import torch
+    from vllm import LLM, SamplingParams
     
-    #stop=["<|user|>"],
-)
+    model_path = script_args.model_name_or_path
+    print("model_path", model_path)
+    seed = script_args.seed
+    # set seed
+    torch.manual_seed(seed)
+    np.random.seed(seed)
 
-if script_args.dataset_name_or_path.split("/")[0] == 'vangard703' :
-    ds = load_dataset(script_args.dataset_name_or_path, split="train")
-    ds_test = load_dataset(script_args.dataset_name_or_path, split="test")
-else :
-    ds = load_from_disk(script_args.dataset_name_or_path)['train']
-    ds_test = load_from_disk(script_args.dataset_name_or_path)['test']
-
-from datasets import Dataset, DatasetDict
-def add_index_to_dataset(dataset: Dataset) -> Dataset:
-    def add_index(example, idx):
-        example['index'] = idx
-        return example
+    tokenizer = AutoTokenizer.from_pretrained(model_path)
+    tokenizer.truncation_side = "left"
+    tokenizer.padding_side  = 'left'
+    sampling_params = SamplingParams(
+        temperature=script_args.temperature,
+        top_p=1.0,
+        max_tokens=script_args.max_new_tokens,
+        n=script_args.K,
+        stop_token_ids=[tokenizer.eos_token_id] + script_args.eos_ids,
+        seed=seed
+        #stop=["<|user|>"],
+    )
     
-    return dataset.map(add_index, with_indices=True)
+    original_prompt = ds['prompt']
+    index = ds['index']
+    sys_prompt = None
+    print(ds)
+    ds = ds.map(
+    lambda x: {
+        "prompt": tokenizer.apply_chat_template(maybe_insert_system_message(x["chosen"][:-1]), tokenize=False, add_generation_prompt=True)
+    }
+    )
+    prompt_chat_tem = ds.map(
+        lambda x: 
+            {"prompt_chat_tem": x["chosen"][:-1]})
+        
+    data_size = len(ds["prompt"])
+    prompts = ds["prompt"]
 
-if not "index" in ds.features :
-    ds = add_index_to_dataset(ds)
+    llm = LLM(
+        model=model_path,
+        tokenizer=model_path,
+        dtype="bfloat16",
+        max_model_len=script_args.max_input_length,
+        load_format="auto",
+        seed=seed,
+        tensor_parallel_size=1,
+        # ray_workers_use_nsight=True, distributed_executor_backend="ray"
+    )
+    outputs = llm.generate(prompts, sampling_params=sampling_params, use_tqdm=True)
 
-original_prompt = ds['prompt']
-index = ds['index']
-sys_prompt = None
-print(ds)
-ds = ds.map(
-lambda x: {
-    "prompt": tokenizer.apply_chat_template(maybe_insert_system_message(x["chosen"][:-1]), tokenize=False, add_generation_prompt=True)
-}
-)
-prompt_chat_tem = ds.map(
-    lambda x: 
-        {"prompt_chat_tem": x["chosen"][:-1]})
+    completions = []
+    used_prompts = []
+    new_dataset = {}
+    new_dataset['prompt'] = []
+    new_dataset['response'] = []
+    new_dataset['original_prompt'] = []
+    new_dataset['truncated'] = []
+    new_dataset['index'] = []
+
+    for i, output in enumerate(outputs):
+        tmp_data = {"prompt": prompts[i], "response": [out.text for out in output.outputs] ,"original_prompt" :original_prompt[i]}
+        new_dataset['prompt'].append(original_prompt[i])
+        new_dataset['response'].append([out.text for out in output.outputs])
+        new_dataset['truncated'].append([len(out.token_ids) == script_args.max_new_tokens for out in output.outputs])
+        new_dataset['original_prompt'].append(original_prompt[i])
+        new_dataset['index'].append(index[i])
+        for out in output.outputs:
+            assert len(out.token_ids) <= script_args.max_new_tokens
+        # print([len(out.token_ids) == script_args.max_new_tokens for out in output.outputs])
+        # print([out.text for out in output.outputs])
+
+    # print(new_dataset)
+
+    from datasets import Dataset,DatasetDict
+    new_dataset = Dataset.from_dict(new_dataset)
+
+    return new_dataset
     
-data_size = len(ds["prompt"])
-prompts = ds["prompt"]
 
-llm = LLM(
-    model=model_path,
-    tokenizer=model_path,
-    dtype="bfloat16",
-    max_model_len=script_args.max_input_length,
-    load_format="auto",
-    seed=42,
-    tensor_parallel_size=script_args.tp
-)
-outputs = llm.generate(prompts, sampling_params=sampling_params, use_tqdm=True)
+def get_physical_gpu_ids():
+    import re
+    # 获取环境变量 CUDA_VISIBLE_DEVICES 的值
+    cuda_visible_devices = os.environ.get('CUDA_VISIBLE_DEVICES', '').strip()
+    
+    if not cuda_visible_devices:
+        # 环境变量未设置，返回所有可用的物理GPU编号
+        try:
+            import torch
+            num_gpus = torch.cuda.device_count()
+            return list(range(num_gpus))
+        except ImportError:
+            try:
+                from tensorflow.python.client import device_lib
+                devices = device_lib.list_local_devices()
+                gpu_ids = [int(re.search(r'GPU:(\d+)', d.name).group(1)) 
+                          for d in devices if d.device_type == 'GPU']
+                return sorted(gpu_ids)
+            except ImportError:
+                raise RuntimeError("Neither PyTorch nor TensorFlow is available to detect GPUs")
+    
+    # 处理环境变量中的逗号分隔值
+    parts = cuda_visible_devices.split(',')
+    gpu_ids = []
+    
+    for part in parts:
+        part = part.strip()
+        if not part:
+            continue
+            
+        # 处理连续范围的表示 (如 2-5)
+        if '-' in part:
+            start, end = part.split('-')
+            try:
+                start_idx = int(start.strip())
+                end_idx = int(end.strip())
+                gpu_ids.extend(range(start_idx, end_idx + 1))
+            except ValueError:
+                raise ValueError(f"Invalid GPU range format: {part}")
+        else:
+            try:
+                gpu_ids.append(int(part))
+            except ValueError:
+                raise ValueError(f"Invalid GPU ID format: {part}")
+    
+    return gpu_ids
 
 
-completions = []
-used_prompts = []
-new_dataset = {}
-new_dataset['prompt'] = []
-new_dataset['response'] = []
-new_dataset['original_prompt'] = []
-new_dataset['truncated'] = []
-new_dataset['index'] = []
+def worker_process(proc_id, ds, return_queue: mp.Queue):
+    # map each process to its corresponding GPU
+    assert proc_id < script_args.my_world_size
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(visible_gpu_ids[proc_id])
+    new_dataset = generate(ds)
+    return_queue.put(new_dataset)
+    
+    
+if __name__ == '__main__':
+    parser = HfArgumentParser(ScriptArguments)
+    script_args = parser.parse_args_into_dataclasses()[0]
+    visible_gpu_ids = get_physical_gpu_ids()
+    #print(visible_gpu_ids)
+    print(f"Visible devices: {visible_gpu_ids}")
 
-for i, output in enumerate(outputs):
-    tmp_data = {"prompt": prompts[i], "response": [out.text for out in output.outputs] ,"original_prompt" :original_prompt[i]}
-    new_dataset['prompt'].append(original_prompt[i])
-    new_dataset['response'].append([out.text for out in output.outputs])
-    new_dataset['truncated'].append([len(out.token_ids) == script_args.max_new_tokens for out in output.outputs])
-    new_dataset['original_prompt'].append(original_prompt[i])
-    new_dataset['index'].append(index[i])
-    for out in output.outputs:
-        assert len(out.token_ids) <= script_args.max_new_tokens
-    # print([len(out.token_ids) == script_args.max_new_tokens for out in output.outputs])
-    # print([out.text for out in output.outputs])
+    if script_args.dataset_name_or_path.split("/")[0] == 'vangard703' :
+        ds = load_dataset(script_args.dataset_name_or_path, split="train")
+        ds_test = load_dataset(script_args.dataset_name_or_path, split="test")
+    else :
+        ds = load_from_disk(script_args.dataset_name_or_path)['train']
+        ds_test = load_from_disk(script_args.dataset_name_or_path)['test']
 
-# print(new_dataset)
+    from datasets import Dataset, DatasetDict
+    def add_index_to_dataset(dataset: Dataset) -> Dataset:
+        def add_index(example, idx):
+            example['index'] = idx
+            return example
+        
+        return dataset.map(add_index, with_indices=True)
 
-from datasets import Dataset,DatasetDict
-new_dataset = Dataset.from_dict(new_dataset)
+    if not "index" in ds.features :
+        ds = add_index_to_dataset(ds)
 
-def del_base_len(sample) :
-    return len(sample['response']) > (script_args.K -1)
+    ds_list = split_dataset(ds, num_splits=script_args.my_world_size)
+    processes = []
+    queues = []
+    
+    for proc_id, sub_ds in enumerate(ds_list):
+        q = mp.Queue()
+        p = mp.Process(
+            target=worker_process,
+            args=(proc_id, sub_ds, q),
+        )
+        p.start()
+        processes.append(p)
+        queues.append(q)
 
-new_dataset = new_dataset.filter(del_base_len)
-save_dataset = DatasetDict({
-    "train": new_dataset,
-    "test": ds_test
-})
-print(save_dataset)
+    result_datasets = []
+    for q in queues:
+        result = q.get()  # blocks until child puts
+        result_datasets.append(result)
 
-save_path = script_args.output_dir
-save_dataset.save_to_disk(save_path)
+    for p in processes:
+        p.join()
+    
+    merged = concatenate_datasets(result_datasets)
+    
+    assert [item['prompt'] for item in merged] == [item['prompt'] for item in ds]
+    
+    def del_base_len(sample) :
+        return len(sample['response']) > (script_args.K -1)
+
+    merged = merged.filter(del_base_len)
+    save_dataset = DatasetDict({
+        "train": merged,
+        "test": ds_test
+    })
+
+    save_path = script_args.output_dir
+    save_dataset.save_to_disk(save_path)

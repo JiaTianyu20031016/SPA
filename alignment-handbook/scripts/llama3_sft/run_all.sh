@@ -29,7 +29,7 @@ do
 
     wait
     sleep 30
-    python scripts/make_training_samples.py --dataset_mixer=${sample_output_dir} --save_confidence_name=${judge_output_dir} --select_num=30000 &
+    python scripts/make_training_samples.py --dataset_mixer=${sample_output_dir} --save_confidence_name=${judge_output_dir} &
 
     wait
     sleep 30

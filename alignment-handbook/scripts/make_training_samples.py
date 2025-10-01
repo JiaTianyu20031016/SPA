@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 @dataclass
 class ScriptArguments:
     select_num: Optional[int] = field(
-        default=8000,
+        default=None,
         metadata={"help": "how many items will be selected as the training data for the next spa iteration. the remaining part will be saved for future selection."},
     )
     dataset_mixer: Optional[str] = field(
@@ -93,7 +93,8 @@ def process_evaluation_results(raw_datasets, save_confidence, strategy="min_max"
         total_indices = len(index_response_rewards.keys())
         processed_count = 0
         
-        for result in pool.imap_unordered(process_single_index, index_response_rewards.keys()):
+        #for result in pool.imap_unordered(process_single_index, index_response_rewards.keys()):
+        for result in pool.imap(process_single_index, raw_datasets['index']):
             processed_count += 1
             if result is not None:
                 results.append(result)
@@ -136,43 +137,63 @@ def main():
         confidence = json.load(json_file)
 
     final_data = process_evaluation_results(initial_training_raw, confidence)
-    sorted_data = sorted(final_data, key=lambda x: abs(x['chosen_reward'] - x['rejected_reward']), reverse=True)
-    selected_data = sorted_data[:scrips_args.select_num]
-    remain_data = sorted_data[scrips_args.select_num:]
-    
-    selected_dataset =  Dataset.from_dict({
-        'index': [item['index'] for item in selected_data],
-        'prompt': [item['prompt'] for item in selected_data],
-        'chosen': [item['chosen'] for item in selected_data],
-        'rejected': [item['rejected'] for item in selected_data],
-        'chosen_reward': [item['chosen_reward'] for item in selected_data],
-        'rejected_reward': [item['rejected_reward'] for item in selected_data],
-        'is_chosen_truncated': [item['is_chosen_truncated'] for item in selected_data],
-        'is_rejected_truncated': [item['is_rejected_truncated'] for item in selected_data]
-    })
-    remain_dataset =  Dataset.from_dict({
-        'index': [item['index'] for item in remain_data],
-        'prompt': [item['prompt'] for item in remain_data],
-        'chosen': [item['chosen'] for item in remain_data],
-        'rejected': [item['rejected'] for item in remain_data],
-        'chosen_reward': [item['chosen_reward'] for item in remain_data],
-        'rejected_reward': [item['rejected_reward'] for item in remain_data],
-        'is_chosen_truncated': [item['is_chosen_truncated'] for item in remain_data],
-        'is_rejected_truncated': [item['is_rejected_truncated'] for item in remain_data]
-    })
-    
-    selected_path = "datasets/"+save_confidence_name.rstrip(".json") 
-    remain_path = selected_path.replace('training', 'remain')
-    selected_dataset = DatasetDict({
-        "train": selected_dataset,
-        "test": initial_testing_raw,
-    })
-    remain_dataset = DatasetDict({
-        "train": remain_dataset,
-        "test": initial_testing_raw,
-    })
-    selected_dataset.save_to_disk(selected_path)
-    remain_dataset.save_to_disk(remain_path)
+    if scrips_args.select_num:
+        sorted_data = sorted(final_data, key=lambda x: abs(x['chosen_reward'] - x['rejected_reward']), reverse=True)
+        selected_data = sorted_data[:scrips_args.select_num]
+        remain_data = sorted_data[scrips_args.select_num:]
+        
+        selected_dataset =  Dataset.from_dict({
+            'index': [item['index'] for item in selected_data],
+            'prompt': [item['prompt'] for item in selected_data],
+            'chosen': [item['chosen'] for item in selected_data],
+            'rejected': [item['rejected'] for item in selected_data],
+            'chosen_reward': [item['chosen_reward'] for item in selected_data],
+            'rejected_reward': [item['rejected_reward'] for item in selected_data],
+            'is_chosen_truncated': [item['is_chosen_truncated'] for item in selected_data],
+            'is_rejected_truncated': [item['is_rejected_truncated'] for item in selected_data]
+        })
+        remain_dataset =  Dataset.from_dict({
+            'index': [item['index'] for item in remain_data],
+            'prompt': [item['prompt'] for item in remain_data],
+            'chosen': [item['chosen'] for item in remain_data],
+            'rejected': [item['rejected'] for item in remain_data],
+            'chosen_reward': [item['chosen_reward'] for item in remain_data],
+            'rejected_reward': [item['rejected_reward'] for item in remain_data],
+            'is_chosen_truncated': [item['is_chosen_truncated'] for item in remain_data],
+            'is_rejected_truncated': [item['is_rejected_truncated'] for item in remain_data]
+        })
+        
+        selected_path = "datasets/"+save_confidence_name.rstrip(".json") 
+        remain_path = selected_path.replace('training', 'remain')
+        selected_dataset = DatasetDict({
+            "train": selected_dataset,
+            "test": initial_testing_raw,
+        })
+        remain_dataset = DatasetDict({
+            "train": remain_dataset,
+            "test": initial_testing_raw,
+        })
+        selected_dataset.save_to_disk(selected_path)
+        remain_dataset.save_to_disk(remain_path)
+    else:
+        final_dataset =  Dataset.from_dict({
+            'index': [item['index'] for item in final_data],
+            'prompt': [item['prompt'] for item in final_data],
+            'chosen': [item['chosen'] for item in final_data],
+            'rejected': [item['rejected'] for item in final_data],
+            'chosen_reward': [item['chosen_reward'] for item in final_data],
+            'rejected_reward': [item['rejected_reward'] for item in final_data],
+            'is_chosen_truncated': [item['is_chosen_truncated'] for item in final_data],
+            'is_rejected_truncated': [item['is_rejected_truncated'] for item in final_data]
+        })
+        
+        
+        save_path = "datasets/"+save_confidence_name.rstrip(".json") 
+        final_dataset = DatasetDict({
+            "train": final_dataset,
+            "test": initial_testing_raw,
+        })
+        final_dataset.save_to_disk(save_path)
 
 
 if __name__ == "__main__":

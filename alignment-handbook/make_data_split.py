@@ -2,7 +2,8 @@ from datasets import load_dataset, Dataset, DatasetDict
 import datasets
 import random
 
-original_data = datasets.load_dataset("argilla/ultrafeedback-binarized-preferences-cleaned")
+#original_data = datasets.load_dataset("argilla/ultrafeedback-binarized-preferences-cleaned")
+original_data = datasets.load_from_disk("/root/jiaty/projects/SPA/datasets/ultrafeedback-binarized-preferences-cleaned-corrected-Armo")
 def add_index(example, idx):
     example['index'] = idx
     return example

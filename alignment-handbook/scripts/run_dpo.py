@@ -27,6 +27,7 @@ from alignment import (
     H4ArgumentParser,
     ModelArguments,
     apply_chat_template,
+    truncate_by_token_length,
     get_checkpoint,
     get_datasets,
     get_kbit_device_map,
@@ -182,6 +183,16 @@ def main():
         #remove_columns=column_names,
         desc="Formatting comparisons with prompt template",
     )
+    
+    '''
+    raw_datasets = raw_datasets.map(
+        truncate_by_token_length,
+        fn_kwargs={"tokenizer": tokenizer, "max_tokens": 300},
+        num_proc=data_args.preprocessing_num_workers,
+        #remove_columns=column_names,
+        desc="Truncating chosen and rejected responses by max token length",
+    )
+    '''
 
     # Replace column names with what TRL needs, text_chosen -> chosen and text_rejected -> rejected
     for split in ["train", 'test']:
